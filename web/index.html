@@ -41,6 +41,7 @@ h1{font-size:22px;margin:6px 0 18px;text-wrap:balance}
 .stats{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:10px;color:var(--muted);font-variant-numeric:tabular-nums}
 .stats b{color:var(--ink)}
 .stats b.stake{color:var(--accent)}
+.stats b.money{color:var(--money)}
 .state{margin-top:8px;font:600 12px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase}
 form{margin-top:18px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;display:grid;gap:14px}
 label{display:grid;gap:6px;font-weight:600}
@@ -152,6 +153,7 @@ let config = { mock: true, currency: 'CAD' };
 let finished = false;
 let mode = null; // 'perKm' or 'goal', from the server
 let who = runner; // the goal-setter's name, from the server
+let charity = false; // goal mode: true = backers pay for the share completed
 
 function rate() { return Number($('rateInput').value); }
 function stake() { return Number($('stakeInput').value); }
@@ -164,12 +166,16 @@ function guide(id) {
 function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
 
 function explain() {
-  $('explain').textContent = mode === 'goal'
-    ? `If ${who} misses the goal, you're charged ${money(stake())} × the share of the goal they missed. If they hit it, you're charged nothing.`
-    : `You'll be charged ${money(rate())} × the final distance, up to ${money($('cap').value)}, once the run ends.`;
-  const consent = mode === 'goal'
-    ? `I authorize a charge of up to ${money(stake())} to my card if ${who} misses this goal, and nothing if they meet it.`
-    : `I authorize a charge of ${money(rate())} per km, up to ${money($('cap').value)}, to my card after the run.`;
+  $('explain').textContent = mode !== 'goal'
+    ? `You'll be charged ${money(rate())} × the final distance, up to ${money($('cap').value)}, once the run ends.`
+    : charity
+      ? `You give ${money(stake())} × the share of the goal ${who} completes, so every step raises money and finishing gives your full stake.`
+      : `If ${who} misses the goal, you're charged ${money(stake())} × the share of the goal they missed. If they hit it, you're charged nothing.`;
+  const consent = mode !== 'goal'
+    ? `I authorize a charge of ${money(rate())} per km, up to ${money($('cap').value)}, to my card after the run.`
+    : charity
+      ? `I authorize a charge of up to ${money(stake())} to my card: my stake × the share of this goal ${who} completes.`
+      : `I authorize a charge of up to ${money(stake())} to my card if ${who} misses this goal, and nothing if they meet it.`;
   // Consent always matches the amount on screen: changing the amount clears the tick.
   if ($('consentText').textContent !== consent) {
     $('consentText').textContent = consent;
@@ -193,15 +199,16 @@ $('cap').addEventListener('input', explain);
 function applyMode(t) {
   mode = t.mode;
   who = t.name || runner;
+  charity = t.payOn === 'progress';
   const isGoal = mode === 'goal';
   $('perKmFields').hidden = isGoal;
   $('stakeFields').hidden = !isGoal;
   $('meter').hidden = !isGoal;
   $('go').textContent = isGoal ? 'Back with card' : 'Pledge with card';
   $('listTitle').textContent = isGoal ? 'Backers' : 'Sponsors';
-  $('title').textContent = isGoal ? `Back ${who}'s goal: ${fmt(t.target, t.unit)} ${unitName(t.unit)} ${t.label}` : `Pledge per kilometre for ${runner}`;
+  $('title').textContent = isGoal ? `${charity ? 'Sponsor' : 'Back'} ${who}'s ${charity ? 'charity ' : ''}goal: ${fmt(t.target, t.unit)} ${unitName(t.unit)} ${t.label}` : `Pledge per kilometre for ${runner}`;
   $('fine').textContent = isGoal
-    ? "Card details are entered in Helcim's secure payment window and never touch this site. Your card is checked now and charged at most once, at the end, only for the share of the goal that was missed."
+    ? `Card details are entered in Helcim's secure payment window and never touch this site. Your card is checked now and charged at most once, at the end, only for the share of the goal that was ${charity ? 'completed' : 'missed'}.`
     : "Card details are entered in Helcim's secure payment window and never touch this site. Your card is checked now and charged once, after the run.";
   explain();
 }
@@ -229,16 +236,22 @@ function render(t) {
     $('hero').textContent = fmt(t.progress, u);
     $('heroLabel').textContent = `of ${fmt(t.target, u)} ${unitName(u)}`;
     $('meterFill').style.width = Math.min(100, (100 * t.progress) / t.target) + '%';
-    $('stats').innerHTML = `<span><b class="stake">${money(t.raised)}</b> ${t.settled ? 'charged' : 'at stake'}</span><span><b>${money(t.stakeTotal)}</b> staked</span><span><b>${t.pledgers}</b> ${t.pledgers === 1 ? 'backer' : 'backers'}</span>`
+    $('stats').innerHTML = (charity
+      ? `<span><b class="money">${money(t.raised)}</b> ${t.settled ? 'donated' : 'raised'}</span>`
+      : `<span><b class="stake">${money(t.raised)}</b> ${t.settled ? 'charged' : 'at stake'}</span>`)
+      + `<span><b>${money(t.stakeTotal)}</b> staked</span><span><b>${t.pledgers}</b> ${t.pledgers === 1 ? 'backer' : 'backers'}</span>`
       + (t.hr ? `<span>♥ <b>${t.hr}</b> bpm</span>` : '');
     const left = Math.max(0, t.target - t.progress);
-    $('state').textContent = t.goalMet ? 'Goal met · nobody is charged'
-      : t.settled ? 'Settled · goal missed'
+    $('state').textContent = t.goalMet ? (charity ? `Goal met · ${money(t.stakeTotal)} raised` : 'Goal met · nobody is charged')
+      : t.settled ? (charity ? `Settled · ${money(t.raised)} donated` : 'Settled · goal missed')
       : t.finished ? `Finished · ${fmt(left, u)} ${unitName(u)} short`
       : `${fmt(left, u)} ${unitName(u)} to go · ${runState(t)}`;
     $('sponsors').innerHTML = t.pledges.length
       ? t.pledges.map((p) => `<li><span>${esc(p.name)} · ${money(p.stake)} stake</span><span>${
-          p.status === 'charged' ? money(p.amount) + ' charged' : p.status === 'skipped' ? 'released' : p.status === 'failed' ? 'declined' : money(p.amount) + ' at stake'}</span></li>`).join('')
+          p.status === 'charged' ? money(p.amount) + (charity ? ' donated' : ' charged')
+          : p.status === 'skipped' ? (charity ? 'nothing owed' : 'released')
+          : p.status === 'failed' ? 'declined'
+          : money(p.amount) + (charity ? ' raised' : ' at stake')}</span></li>`).join('')
       : '<li><span>No backers yet. Be the first.</span><span></span></li>';
   } else {
     $('hero').textContent = money(t.raised);

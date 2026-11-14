@@ -462,3 +462,53 @@ test('the server refuses to start with real Helcim and no relay key', () => {
   assert.equal(out.status, 1, `expected exit 1, got ${out.status} (signal ${out.signal})`);
   assert.match(out.stderr, /RELAY_KEY/);
 });
+
+// ---- charity goals: backers pay for the share completed ----------------------------
+
+test('a charity stake owes its share of the goal completed, never more than the stake', () => {
+  const goal = { target: 10, logged: 2, payOn: 'progress' };
+  assert.equal(stakeAmount(20, goal, 0), 4); // 2 of 10 done
+  assert.equal(stakeAmount(20, goal, 3), 10); // half done
+  assert.equal(stakeAmount(20, goal, 8), 20); // met
+  assert.equal(stakeAmount(20, goal, 30), 20, 'overshoot never charges more than the stake');
+  assert.equal(stakeAmount(20, { target: 10, logged: 2 }, 3), 10, 'no payOn still means commitment');
+});
+
+test('a charity goal raises money with every step and gives it all when met', async (ctx) => {
+  const { calls, helcim } = fakeHelcimApi();
+  const r = await start(ctx, { helcim });
+  const set = await r.post('/api/runs/r1/goal', { unit: 'steps', target: 1000, payOn: 'progress', label: 'today' });
+  assert.equal(set.body.payOn, 'progress');
+  await stake(r, calls, { name: 'Ana', stake: 20, token: 'tok_ana' });
+  await stake(r, calls, { name: 'Bo', stake: 10, token: 'tok_bo' });
+
+  await r.post('/api/runs/r1/telemetry', { steps: 0 });
+  let t = (await r.post('/api/runs/r1/telemetry', { steps: 500 })).body;
+  assert.equal(t.payOn, 'progress');
+  assert.equal(t.raised, 15); // half of $30
+  t = (await r.post('/api/runs/r1/telemetry', { steps: 1200, finished: true })).body;
+  assert.equal(t.goalMet, true);
+  assert.equal(t.raised, 30);
+
+  const res = await r.post('/api/runs/r1/settle', {});
+  assert.deepEqual(calls.filter((c) => c.url.endsWith('/payment/purchase')).map((c) => c.body.amount), [20, 10]);
+  assert.equal(res.body.total, 30);
+});
+
+test('charity nudges talk about money raised, not money at stake', async (ctx) => {
+  const { calls, helcim } = fakeHelcimApi();
+  const r = await start(ctx, { helcim });
+  await r.post('/api/runs/r1/goal', { unit: 'steps', target: 1000, payOn: 'progress' });
+  await stake(r, calls, { name: 'Ana', stake: 20, token: 'tok_ana' });
+  const backer = (await r.post('/api/runs/r1/nudge', { steps: 0 })).body;
+  assert.equal(backer.title, 'Ana backed you');
+  assert.match(backer.body, /\$0\.00 raised so far, 1,000 steps to go/);
+  const met = (await r.post('/api/runs/r1/nudge', { steps: 1000 })).body;
+  assert.equal(met.title, 'Goal met!');
+  assert.match(met.body, /\$20\.00 raised for charity/);
+});
+
+test('payOn is validated', async (ctx) => {
+  const r = await start(ctx);
+  assert.equal((await r.post('/api/runs/x1/goal', { unit: 'steps', target: 1000, payOn: 'whenever' })).status, 400);
+});

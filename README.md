@@ -2,7 +2,10 @@
 
 **2026 Tech Thursday x Garmin Hackathon · JJ's For Shiggles Project**
 
-Put your friends' money where your feet are. PledgePace is a Garmin Connect IQ watch app and a small web service: you set an activity goal, friends back it with a stake, and each backer is charged only for the share of the goal you miss. Hit the goal and nobody pays. Every step you take lowers what your friends stand to lose.
+Put your friends' money where your feet are. PledgePace is a Garmin Connect IQ watch app and a small web service: you set an activity goal and friends back it with a stake. Pick how they pay:
+
+- **Commitment:** each backer pays only for the share of the goal you **miss**. Hit the goal and nobody pays; every step lowers what your friends stand to lose.
+- **Charity:** each backer gives for the share you **complete**. Every step raises money, and finishing gives every full stake to the cause.
 
 ![Three PledgePace watch screens (money at stake with a progress ring, a "Sam backed you" notification, GOAL MET) next to the pledge page on a phone](docs/screenshots/hero.png)
 
@@ -15,7 +18,7 @@ Built around the hackathon brief, *"Build something that would make your own Hea
 1. **Set a goal** on the dashboard (`/organizer`): 8,000 steps today, 20 floors, 150 active minutes or 20 km this week.
 2. **Share the pledge link.** Friends pick a stake, tick a box authorizing a charge of up to that amount, and enter a card in Helcim's secure card window. The card is checked with a $0 verify; nothing is charged yet.
 3. **Move.** The watch counts progress with its own sensors, shows the money still at stake inside a progress ring, and nudges you: "Sam backed you", "2,000 steps to go", "Goal met!".
-4. **Settle.** Each backer is charged *stake × share of the goal missed*. A met goal releases everyone without a charge.
+4. **Settle.** In a commitment goal each backer is charged *stake × share missed*, so a met goal releases everyone. In a charity goal it's *stake × share completed*, so a met goal gives every full stake.
 
 ```
 pledge page ── POST /api/pledges (consent) ──▶ server ── /helcim-pay/initialize ($0 verify) ──▶ Helcim
@@ -45,9 +48,10 @@ Sensor goals count from the moment the goal is set and survive the watch's midni
 - **Background nudges.** A Connect IQ background task runs every 5 minutes, the shortest interval allowed, and posts real watch notifications through the Notifications API (API 5.1 and later), with an "Open PledgePace?" prompt as the fallback on older watches.
 - **Payments through Helcim.** HelcimPay.js $0 verify, saved card tokens, idempotent purchases, response-hash validation, settlement one backer at a time. Card numbers never touch this server. See [docs/helcim.md](docs/helcim.md).
 - **Phone-first pledge page.** Pinned "Back with card" button, an explicit consent box stating the most that can be charged, a share button, and Add to Home Screen with its own icon.
+- **Commitment or charity, per goal.** A toggle on the dashboard decides whether backers pay for the share you miss or the share you complete; the watch shows money AT STAKE in orange or RAISED in green to match.
 - **Fair by design.** Stakes are capped at $500, a goal locks as soon as anyone backs it so terms never change after commitment, and a pledge without consent is refused before Helcim is contacted.
 - **Per-km charity mode.** Runners without a goal take classic pledges per kilometre with a cap.
-- **No dependencies.** The server is plain Node 20+ with no `npm install`, and 31 tests run with `node --test`.
+- **No dependencies.** The server is plain Node 20+ with no `npm install`, and 35 tests run with `node --test`.
 
 ## Quick start
 
@@ -106,7 +110,7 @@ docs/     API, Helcim notes, simulator guide, screenshots
 
 ## What's verified
 
-- **Server:** 31 tests. They run the real Helcim code path against a fake Helcim API and check URLs, headers and body fields. The money rules were each broken on purpose to confirm a test fails: the per-km cap, the hash check, the no-double-charge guard, the stake share, required consent, the goal lock, sensor counters, nudge de-duplication, and the security checks (JSON-only POSTs, trusted-proxy IPs, generic error messages, refusing to run real payments without a key).
+- **Server:** 35 tests. They run the real Helcim code path against a fake Helcim API and check URLs, headers and body fields. The money rules were each broken on purpose to confirm a test fails: the per-km cap, the hash check, the no-double-charge guard, the commitment and charity stake shares, required consent, the goal lock, sensor counters, nudge de-duplication, and the security checks (JSON-only POSTs, trusted-proxy IPs, generic error messages, refusing to run real payments without a key).
 - **Browser:** pledging, consent, settlement and the phone layout, checked at 375px through a public HTTPS tunnel.
 - **Connect IQ simulator (SDK 9.1.0, fēnix 7 and 7 Pro):** steps and km goals through to GOAL MET and settlement, heart rate and zone time reaching the server, a background nudge shown as a notification, and recovery from a wrong key or a stopped server.
 - **Not verified yet:** a physical watch; a real Helcim test account; nudges while the app is closed (the simulator only fires background events for the running app); a nonzero floors reading; Garmin Connect charting the custom FIT fields of a sideloaded app.

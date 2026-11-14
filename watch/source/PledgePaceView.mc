@@ -120,12 +120,15 @@ class PledgePaceView extends WatchUi.View {
             dc.setColor(Graphics.COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
             dc.drawText(w / 2, heroY, Graphics.FONT_LARGE, fit(dc, Graphics.FONT_LARGE, heroY, "GOAL MET", "GOAL!"), center);
             dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(w / 2, h * 0.48, Graphics.FONT_XTINY, "$" + _s.stakeTotal.format("%.2f") + " SAVED", center);
+            var outcome = _s.payOn.equals("progress") ? " RAISED" : " SAVED";
+            dc.drawText(w / 2, h * 0.48, Graphics.FONT_XTINY, "$" + _s.stakeTotal.format("%.2f") + outcome, center);
         } else {
-            dc.setColor(Graphics.COLOR_ORANGE, Graphics.COLOR_TRANSPARENT);
+            // Charity goals count money raised (green); commitments count money at stake (orange).
+            var charity = _s.payOn.equals("progress");
+            dc.setColor(charity ? Graphics.COLOR_GREEN : Graphics.COLOR_ORANGE, Graphics.COLOR_TRANSPARENT);
             dc.drawText(w / 2, heroY, Graphics.FONT_LARGE, "$" + _s.raised.format("%.2f"), center);
             dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(w / 2, h * 0.48, Graphics.FONT_XTINY, "AT STAKE", center);
+            dc.drawText(w / 2, h * 0.48, Graphics.FONT_XTINY, charity ? "RAISED" : "AT STAKE", center);
         }
 
         var lineY = h * 0.59;

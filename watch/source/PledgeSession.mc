@@ -50,6 +50,8 @@ class PledgeSession {
     // Goal unit: "km" (GPS), "steps" (accelerometer), "floors" (barometer) or
     // "minutes" (time at or above heart-rate zone 2).
     var unit as String = "km";
+    // "miss" = backers pay for the share missed (commitment); "progress" = for the share completed (charity).
+    var payOn as String = "miss";
     var target as Float = 0.0;
     var progress as Float = 0.0;
     var heartRate as Number? = null;
@@ -261,6 +263,10 @@ class PledgeSession {
         var md = data["mode"];
         if (md instanceof String) {
             mode = md;
+        }
+        var po = data["payOn"];
+        if (po instanceof String) {
+            payOn = po;
         }
         var u = data["unit"];
         if (u instanceof String) {

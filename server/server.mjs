@@ -38,11 +38,14 @@ export const round2 = (x) => Math.round(x * 100) / 100;
 //! What one pledge owes for a given distance: rate × km, never more than its cap.
 export const pledgeAmount = (p, km) => round2(Math.min(p.rate * km, p.cap));
 
-//! What one goal-mode backer owes: their stake times the share of the goal still missed.
-//! goal = { target, logged }; done = progress counted since the goal was set.
+//! What one goal-mode backer owes. goal = { target, logged, payOn }; done = progress since the goal was set.
+//! payOn 'miss' (commitment, the default): stake x the share of the goal missed, so a met goal costs nothing.
+//! payOn 'progress' (charity): stake x the share completed, so every step raises money and a met goal gives it all.
+export const PAY_ON = ['miss', 'progress'];
 export function stakeAmount(stake, goal, done) {
-  const missed = Math.max(0, goal.target - (goal.logged + done));
-  return round2((stake * missed) / goal.target);
+  const completed = Math.min(1, Math.max(0, (goal.logged + done) / goal.target));
+  const share = goal.payOn === 'progress' ? completed : 1 - completed;
+  return round2(stake * share);
 }
 
 // Goal units and the sensor behind each: km from the recorded activity (GPS), steps
@@ -158,6 +161,7 @@ export function createPledgeServer({
       const progress = r.goal.logged + done(r);
       Object.assign(t, {
         name: r.goal.name ?? runner,
+        payOn: r.goal.payOn ?? 'miss',
         unit: r.goal.unit,
         target: r.goal.target,
         logged: r.goal.logged,
@@ -185,19 +189,28 @@ export function createPledgeServer({
     const seen = (r.nudged ??= { pledgers: 0, goalMet: false, behindAt: 0 });
     const out = {};
     const left = t.mode === 'goal' ? Math.max(0, t.target - t.progress) : 0;
+    const charity = t.payOn === 'progress';
     if (t.mode === 'goal' && t.goalMet && !seen.goalMet) {
-      Object.assign(out, { title: 'Goal met!', body: `${dollars(t.stakeTotal)} saved for your ${t.pledgers === 1 ? 'backer' : 'backers'}` });
+      const body = charity
+        ? `${dollars(t.stakeTotal)} raised for charity`
+        : `${dollars(t.stakeTotal)} saved for your ${t.pledgers === 1 ? 'backer' : 'backers'}`;
+      Object.assign(out, { title: 'Goal met!', body });
       seen.goalMet = true;
     } else if (t.pledgers > seen.pledgers) {
       const fresh = t.pledgers - seen.pledgers;
       const newest = live(runner).filter((p) => p.confirmedAt).sort((a, b) => b.confirmedAt - a.confirmedAt)[0];
       const who = fresh === 1 && newest ? newest.name : `${fresh} new ${t.mode === 'goal' ? 'backers' : 'sponsors'}`;
       out.title = fresh === 1 && newest ? `${who} backed you` : who;
-      out.body = t.mode === 'goal'
-        ? `${dollars(t.raised)} now at stake, ${amount(left, t.unit)} ${UNIT_WORDS[t.unit]} to go`
-        : `${dollars(t.ratePerKm)} per km pledged`;
-    } else if (t.mode === 'goal' && !t.goalMet && t.raised > 0 && now() - seen.behindAt >= nudgeEveryMin * 60000) {
-      Object.assign(out, { title: `${amount(left, t.unit)} ${UNIT_WORDS[t.unit]} to go`, body: `${dollars(t.raised)} of your backers' money is at stake` });
+      out.body = t.mode !== 'goal'
+        ? `${dollars(t.ratePerKm)} per km pledged`
+        : charity
+          ? `${dollars(t.raised)} raised so far, ${amount(left, t.unit)} ${UNIT_WORDS[t.unit]} to go`
+          : `${dollars(t.raised)} now at stake, ${amount(left, t.unit)} ${UNIT_WORDS[t.unit]} to go`;
+    } else if (t.mode === 'goal' && !t.goalMet && t.stakeTotal > 0 && now() - seen.behindAt >= nudgeEveryMin * 60000) {
+      const body = charity
+        ? `${dollars(t.stakeTotal - t.raised)} more for charity if you finish`
+        : `${dollars(t.raised)} of your backers' money is at stake`;
+      Object.assign(out, { title: `${amount(left, t.unit)} ${UNIT_WORDS[t.unit]} to go`, body });
       seen.behindAt = now();
     }
     seen.pledgers = t.pledgers;
@@ -375,7 +388,7 @@ export function createPledgeServer({
         }
         const t = tally(m[1]);
         const reply = { mode: t.mode, raised: t.raised, ratePerKm: t.ratePerKm, pledgers: t.pledgers, milestone, finished: t.finished, settled: t.settled };
-        if (t.mode === 'goal') Object.assign(reply, { unit: t.unit, target: t.target, progress: t.progress, stakeTotal: t.stakeTotal, goalMet: t.goalMet });
+        if (t.mode === 'goal') Object.assign(reply, { payOn: t.payOn, unit: t.unit, target: t.target, progress: t.progress, stakeTotal: t.stakeTotal, goalMet: t.goalMet });
         return send(res, 200, reply);
       }
 
@@ -407,6 +420,8 @@ export function createPledgeServer({
         const logged = round2(Number(b.logged ?? b.loggedKm ?? 0));
         const label = typeof b.label === 'string' && b.label.trim() ? b.label.trim().slice(0, 30) : 'this week';
         const who = typeof b.name === 'string' && b.name.trim() ? b.name.trim().slice(0, 30) : m[1];
+        const payOn = b.payOn ?? 'miss';
+        if (!PAY_ON.includes(payOn)) return send(res, 400, { error: `payOn must be one of ${PAY_ON.join(', ')}` });
         if (!UNITS.includes(unit)) return send(res, 400, { error: `unit must be one of ${UNITS.join(', ')}` });
         if (!(target >= GOAL_MIN[unit] && target <= GOAL_MAX[unit])) return send(res, 400, { error: `goal must be between ${GOAL_MIN[unit]} and ${GOAL_MAX[unit]} ${unit}` });
         if (!(logged >= 0 && logged < target)) return send(res, 400, { error: 'the amount already done must be at least 0 and less than the goal' });
@@ -415,7 +430,7 @@ export function createPledgeServer({
         }
         const r = run(m[1]);
         if (r.finished) return send(res, 409, { error: 'this run has finished' });
-        r.goal = { unit, target, logged, label, name: who, setAt: now() };
+        r.goal = { unit, target, logged, label, name: who, payOn, setAt: now() };
         r.counters = {}; // sensor progress counts from now
         r.nudged = { pledgers: 0, goalMet: false, behindAt: now() };
         persist();

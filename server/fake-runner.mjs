@@ -32,7 +32,8 @@ const id = setInterval(async () => {
     if (t.mode === 'goal') {
       const buzz = t.goalMet && !goalMet ? '  \x07[buzz] goal met!' : '';
       goalMet = t.goalMet;
-      console.log(`${t.progress}/${t.target} ${t.unit}  $${t.raised.toFixed(2)} still at stake of $${t.stakeTotal.toFixed(2)} (${t.pledgers} backers, HR ${hr})${buzz}`);
+      const what = t.payOn === 'progress' ? 'raised' : 'still at stake';
+      console.log(`${t.progress}/${t.target} ${t.unit}  $${t.raised.toFixed(2)} ${what} of $${t.stakeTotal.toFixed(2)} (${t.pledgers} backers, HR ${hr})${buzz}`);
     } else {
       const m = Math.floor(t.raised / t.milestone);
       const buzz = m > lastMilestone ? '  \x07[buzz] milestone!' : '';

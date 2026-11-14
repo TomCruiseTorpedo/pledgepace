@@ -20,7 +20,7 @@ All bodies are JSON, and every POST must send `content-type: application/json` (
 ```json
 {
   "runner": "jj", "mode": "goal", "currency": "CAD",
-  "name": "JJ", "unit": "steps", "target": 8000, "logged": 0, "label": "today",
+  "name": "JJ", "payOn": "miss", "unit": "steps", "target": 8000, "logged": 0, "label": "today",
   "progress": 5200, "goalMet": false,
   "raised": 10.5, "stakeTotal": 30, "pledgers": 2, "hr": 128,
   "finished": false, "settled": false, "updatedAt": 1794680000000,
@@ -28,16 +28,17 @@ All bodies are JSON, and every POST must send `content-type: application/json` (
 }
 ```
 
-In goal mode `raised` is what would be charged if the run settled now: the money still at stake. Runners without a goal report `mode: "perKm"`, `km`, `ratePerKm` and per-km pledges instead.
+In goal mode `raised` is what would be charged if the run settled now: the money still at stake for a commitment goal, or the money raised so far for a charity goal. Runners without a goal report `mode: "perKm"`, `km`, `ratePerKm` and per-km pledges instead.
 
 ## Goals
 
 `POST /api/runs/:runner/goal` (**key**)
 
 ```json
-{ "unit": "steps", "target": 8000, "logged": 0, "label": "today", "name": "JJ" }
+{ "unit": "steps", "target": 8000, "logged": 0, "label": "today", "name": "JJ", "payOn": "miss" }
 ```
 
+- `payOn` is `miss` (commitment, the default: each backer pays stake × share of the goal missed) or `progress` (charity: stake × share completed, never more than the stake).
 - `unit` is `steps`, `floors`, `minutes` or `km`. Limits: steps 100 to 500,000; floors 1 to 1,000; minutes 1 to 3,000; km 0.5 to 300.
 - `logged` is progress made before the goal was set and must be less than `target`.
 - Refused with 409 once anyone has pledged on the runner: backers' terms never change. Use a new runner id to start over.

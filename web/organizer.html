@@ -44,8 +44,12 @@ tr:last-child td{border-bottom:0}
 
   <div id="goalSetup">
     <h2>Set your goal</h2>
-    <p>Friends stake dollars on your goal and pay only for the share you miss, so every step you take lowers what they stand to lose. Set it before anyone backs you. Steps, floors and active minutes count from the moment the goal is set. (Leave it unset to take per-km pledges for a charity run instead.)</p>
+    <p>Friends stake dollars on your goal. Pick how they pay: for the share you <b>miss</b> (a commitment: every step lowers what they stand to lose, and meeting the goal costs nobody anything), or for the share you <b>complete</b> (a charity goal: every step raises money, and finishing gives every full stake). Set it before anyone backs you. Steps, floors and active minutes count from the moment the goal is set. (Leave it unset to take per-km pledges instead.)</p>
     <div class="bar">
+      <select id="payOn" aria-label="How backers pay">
+        <option value="miss">Backers pay for the share I miss (commitment)</option>
+        <option value="progress">Backers pay for the share I complete (charity)</option>
+      </select>
       <input id="who" placeholder="Your name" aria-label="Your name, shown on the pledge page" maxlength="30">
       <select id="unit" aria-label="Goal unit">
         <option value="steps">Steps (accelerometer)</option>
@@ -86,13 +90,13 @@ async function load() {
   // A goal can only be set while nobody has pledged, so hide the form once it can't be used.
   $('goalSetup').hidden = goal || t.pledgers > 0;
   $('intro').textContent = goal
-    ? `${t.name}'s goal: ${fmt(t.target, t.unit)} ${UNIT_NAMES[t.unit]} ${t.label}. Settling charges each backer their stake × the share of the goal missed. Running it again never double-charges.`
+    ? `${t.name}'s ${t.payOn === 'progress' ? 'charity ' : ''}goal: ${fmt(t.target, t.unit)} ${UNIT_NAMES[t.unit]} ${t.label}. Settling charges each backer their stake × the share of the goal ${t.payOn === 'progress' ? 'completed' : 'missed'}. Running it again never double-charges.`
     : 'Settling charges every sponsor once, for the final distance, through Helcim. Running it again never double-charges.';
   if (goal) {
-    $('total').textContent = `${fmt(t.progress, t.unit)} of ${fmt(t.target, t.unit)} ${UNIT_NAMES[t.unit]} · ${money(t.raised)} at stake of ${money(t.stakeTotal)}${t.hr ? ` · ♥ ${t.hr} bpm` : ''}${t.goalMet ? ' · goal met' : ''}${t.settled ? ' · settled' : ''}`;
+    $('total').textContent = `${fmt(t.progress, t.unit)} of ${fmt(t.target, t.unit)} ${UNIT_NAMES[t.unit]} · ${money(t.raised)} ${t.payOn === 'progress' ? 'raised' : 'at stake'} of ${money(t.stakeTotal)}${t.hr ? ` · ♥ ${t.hr} bpm` : ''}${t.goalMet ? ' · goal met' : ''}${t.settled ? ' · settled' : ''}`;
     $('head').innerHTML = '<tr><th>Backer</th><th>Stake</th><th>Amount</th><th>Status</th></tr>';
     $('rows').innerHTML = t.pledges.length
-      ? t.pledges.map((p) => `<tr><td>${esc(p.name)}</td><td class="n">${money(p.stake)}</td><td class="n">${money(p.amount)}</td><td>${p.status === 'skipped' ? 'released' : p.status}</td></tr>`).join('')
+      ? t.pledges.map((p) => `<tr><td>${esc(p.name)}</td><td class="n">${money(p.stake)}</td><td class="n">${money(p.amount)}</td><td>${p.status === 'skipped' ? (t.payOn === 'progress' ? 'nothing owed' : 'released') : p.status}</td></tr>`).join('')
       : '<tr><td colspan="4">No confirmed backers yet.</td></tr>';
   } else {
     $('total').textContent = `${money(t.raised)} · ${t.km.toFixed(2)} km${t.settled ? ' · settled' : ''}`;
@@ -110,7 +114,7 @@ async function post(path, body) {
 }
 
 $('setGoal').addEventListener('click', async () => {
-  const body = { unit: $('unit').value, target: Number($('goalKm').value), logged: Number($('loggedKm').value || 0) };
+  const body = { unit: $('unit').value, payOn: $('payOn').value, target: Number($('goalKm').value), logged: Number($('loggedKm').value || 0) };
   if ($('label').value.trim()) body.label = $('label').value.trim();
   if ($('who').value.trim()) body.name = $('who').value.trim();
   const { ok, out } = await post(`${runnerPath()}/goal`, body);
