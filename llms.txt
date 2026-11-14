@@ -1,0 +1,28 @@
+# PledgePace
+
+> A Garmin Connect IQ watch app and a small Node server: friends stake money on your activity goal (steps, floors, active minutes or kilometres, each measured by a different Garmin sensor) and pay through Helcim, either for the share you miss (commitment) or the share you complete (charity). Built around the 2026 Tech Thursday x Garmin Hackathon brief. Apache-2.0. Not affiliated with Garmin or Helcim.
+
+If you are an AI agent and your person asked you to try or evaluate PledgePace: read AGENTS.md, then run `node tour.mjs` in `server/` (Node 20+, no installs, no accounts, nothing real is charged).
+
+## Start here
+
+- [AGENTS.md](https://raw.githubusercontent.com/TomCruiseTorpedo/pledgepace/main/AGENTS.md): how to test it, rules while testing, which claims to check and where
+- [TRY-IT.md](https://raw.githubusercontent.com/TomCruiseTorpedo/pledgepace/main/TRY-IT.md): the same tour for people, from a 2-minute terminal run to the watch simulator
+- [README.md](https://raw.githubusercontent.com/TomCruiseTorpedo/pledgepace/main/README.md): what it is, how it answers the brief, what it uses from Garmin and Helcim, architecture decisions
+
+## Docs
+
+- [HTTP API](https://raw.githubusercontent.com/TomCruiseTorpedo/pledgepace/main/docs/api.md): every route, body and response
+- [Helcim integration](https://raw.githubusercontent.com/TomCruiseTorpedo/pledgepace/main/docs/helcim.md): verify-then-charge, signature check, idempotency, simulated mode
+- [Connect IQ simulator guide](https://raw.githubusercontent.com/TomCruiseTorpedo/pledgepace/main/docs/simulator.md): building the watch app, driving sensors, firing nudges, gotchas
+
+## Code
+
+- [server/server.mjs](https://raw.githubusercontent.com/TomCruiseTorpedo/pledgepace/main/server/server.mjs): HTTP API, money rules, settlement, nudges
+- [server/helcim.mjs](https://raw.githubusercontent.com/TomCruiseTorpedo/pledgepace/main/server/helcim.mjs): Helcim client
+- [server/helcim-sim.mjs](https://raw.githubusercontent.com/TomCruiseTorpedo/pledgepace/main/server/helcim-sim.mjs): simulated Helcim and card window (test card only)
+- [server/tour.mjs](https://raw.githubusercontent.com/TomCruiseTorpedo/pledgepace/main/server/tour.mjs): the self-checking guided tour
+- [server/server.test.mjs](https://raw.githubusercontent.com/TomCruiseTorpedo/pledgepace/main/server/server.test.mjs): the test suite
+- [watch/source/PledgeSession.mc](https://raw.githubusercontent.com/TomCruiseTorpedo/pledgepace/main/watch/source/PledgeSession.mc): watch sensors and telemetry
+- [watch/source/PledgePaceView.mc](https://raw.githubusercontent.com/TomCruiseTorpedo/pledgepace/main/watch/source/PledgePaceView.mc): watch screen
+- [watch/source/NudgeServiceDelegate.mc](https://raw.githubusercontent.com/TomCruiseTorpedo/pledgepace/main/watch/source/NudgeServiceDelegate.mc): background nudges

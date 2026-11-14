@@ -11,6 +11,8 @@ Put your friends' money where your feet are. PledgePace turns an activity goal i
 
 > **Status:** side project. It runs end to end in the Connect IQ simulator and the browser, with Helcim in mock or simulated mode. It has not run on a physical watch or against a real Helcim account yet. See [What's verified](#whats-verified).
 
+**Try it in two minutes:** `git clone https://github.com/TomCruiseTorpedo/pledgepace && cd pledgepace/server && node tour.mjs` runs the whole story with a check on every step (Node 20+, nothing to install, nothing real charged). More ways to play, including a click-around server and the watch simulator, are in [TRY-IT.md](TRY-IT.md). **AI agents:** start with [AGENTS.md](AGENTS.md) or [llms.txt](llms.txt).
+
 ## The problem
 
 The hackathon brief: *"Build something that would make your own Health & Wellness better. You're the user."*
@@ -140,7 +142,7 @@ The HTTP API is described in [docs/api.md](docs/api.md).
 
 ```
 server/   server.mjs (HTTP API and settlement), helcim.mjs (Helcim client), helcim-sim.mjs (simulated Helcim),
-          fake-runner.mjs, server.test.mjs
+          tour.mjs (self-checking guided tour), fake-runner.mjs, server.test.mjs
 web/      index.html (pledge page), organizer.html (dashboard), manifest and icons
 watch/    Monkey C source, resources and manifest
 docs/     API, Helcim notes, simulator guide, screenshots

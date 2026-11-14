@@ -11,6 +11,8 @@
   "scripts": {
     "start": "node server.mjs",
     "fake-runner": "node fake-runner.mjs",
-    "test": "node --test --test-timeout=10000"
+    "test": "node --test --test-timeout=10000",
+    "tour": "node tour.mjs",
+    "tour:serve": "node tour.mjs --serve"
   }
 }
