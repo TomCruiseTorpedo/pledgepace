@@ -1,0 +1,14 @@
+<settings>
+    <setting propertyKey="@Properties.serverUrl" title="@Strings.ServerUrlTitle">
+        <settingConfig type="alphaNumeric" />
+    </setting>
+    <setting propertyKey="@Properties.runnerId" title="@Strings.RunnerIdTitle">
+        <settingConfig type="alphaNumeric" />
+    </setting>
+    <setting propertyKey="@Properties.relayKey" title="@Strings.RelayKeyTitle">
+        <settingConfig type="alphaNumeric" />
+    </setting>
+    <setting propertyKey="@Properties.pollSeconds" title="@Strings.PollTitle">
+        <settingConfig type="numeric" min="2" max="60" />
+    </setting>
+</settings>

@@ -1,0 +1,12 @@
+<strings>
+    <string id="AppName">PledgePace</string>
+    <string id="FinishPrompt">Finish run?</string>
+    <string id="RaisedChartTitle">Dollars raised</string>
+    <string id="RaisedLabel">Raised</string>
+    <string id="TotalLabel">Pledges raised</string>
+    <string id="DollarUnits">$</string>
+    <string id="ServerUrlTitle">Server URL (https)</string>
+    <string id="RunnerIdTitle">Runner ID</string>
+    <string id="RelayKeyTitle">Relay key</string>
+    <string id="PollTitle">Poll every (seconds)</string>
+</strings>

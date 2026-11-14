@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PledgePace Organizer</title>
+<style>
+:root{--bg:#f4f5f0;--panel:#fff;--ink:#141714;--muted:#5b625c;--line:#d8ddd5;--money:#1f7a3a;--accent:#c2410c;--accent-ink:#fff;--f:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,monospace}
+@media (prefers-color-scheme: dark){:root{--bg:#060807;--panel:#111513;--ink:#e8ede9;--muted:#98a29b;--line:#252c28;--money:#5fd17e;--accent:#ff7a3d;--accent-ink:#000;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--f)}
+.wrap{max-width:760px;margin:0 auto;padding:20px max(16px,env(safe-area-inset-left)) 48px}
+h1{font-size:22px;margin:0 0 4px}
+h2{font:600 12px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:22px 0 8px}
+p{color:var(--muted);margin:0 0 16px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+input{font:inherit;color:inherit;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 11px;min-width:0;flex:1}
+input.short{flex:0 1 110px}
+select{font:inherit;color:inherit;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 11px}
+select:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+button{font:700 15px/1 var(--f);padding:11px 16px;border:0;border-radius:8px;background:var(--accent);color:var(--accent-ink);cursor:pointer}
+button.quiet{background:transparent;color:var(--ink);border:1px solid var(--line)}
+button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.tbl{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line)}
+th{font:600 11px/1.2 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+td.n{text-align:right;font-family:var(--mono)}
+tr:last-child td{border-bottom:0}
+.total{margin:14px 0;font:800 28px/1.2 var(--f);color:var(--money)}
+.msg{min-height:1.4em;font-weight:600;color:var(--accent)}
+.msg.ok{color:var(--money)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Your goal</h1>
+  <p id="intro">Settling charges every sponsor once, for the final distance, through Helcim. Running it again never double-charges.</p>
+  <div class="bar">
+    <input id="runner" value="runner-1" aria-label="Runner id">
+    <input id="key" type="password" placeholder="Relay key (if set)" aria-label="Relay key" autocomplete="off">
+    <button id="settle">Settle now</button>
+  </div>
+
+  <div id="goalSetup">
+    <h2>Set your goal</h2>
+    <p>Friends stake dollars on your goal and pay only for the share you miss, so every step you take lowers what they stand to lose. Set it before anyone backs you. Steps, floors and active minutes count from the moment the goal is set. (Leave it unset to take per-km pledges for a charity run instead.)</p>
+    <div class="bar">
+      <input id="who" placeholder="Your name" aria-label="Your name, shown on the pledge page" maxlength="30">
+      <select id="unit" aria-label="Goal unit">
+        <option value="steps">Steps (accelerometer)</option>
+        <option value="floors">Floors (barometer)</option>
+        <option value="minutes">Active minutes (heart rate)</option>
+        <option value="km">Kilometres (GPS)</option>
+      </select>
+      <input id="goalKm" class="short" type="number" min="0.5" step="any" placeholder="Goal" aria-label="Goal amount">
+      <input id="loggedKm" class="short" type="number" min="0" step="any" placeholder="Already done" aria-label="Amount already done toward the goal">
+      <input id="label" placeholder="this week" aria-label="Goal period, for example this week">
+      <button id="setGoal" class="quiet">Set goal</button>
+    </div>
+  </div>
+
+  <div class="total" id="total"></div>
+  <div class="msg" id="msg" role="status"></div>
+  <div class="tbl"><table>
+    <thead id="head"><tr><th>Sponsor</th><th>$/km</th><th>Cap</th><th>Amount</th><th>Status</th></tr></thead>
+    <tbody id="rows"><tr><td colspan="5">Loading…</td></tr></tbody>
+  </table></div>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const money = (n) => '$' + Number(n || 0).toFixed(2);
+try { $('key').value = localStorage.getItem('pledgepace-key') || ''; } catch {}
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const UNIT_NAMES = { km: 'km', steps: 'steps', floors: 'floors', minutes: 'active min' };
+const fmt = (n, u) => (u === 'km' ? Number(n || 0).toFixed(2) : Math.floor(Number(n || 0)).toLocaleString('en-CA'));
+const runnerPath = () => `/api/runs/${encodeURIComponent($('runner').value)}`;
+function say(text, ok) { $('msg').textContent = text; $('msg').className = ok ? 'msg ok' : 'msg'; }
+function rememberKey() { try { localStorage.setItem('pledgepace-key', $('key').value); } catch {} }
+
+async function load() {
+  const res = await fetch(runnerPath());
+  const t = await res.json();
+  if (!res.ok) { say(t.error); return; }
+  const goal = t.mode === 'goal';
+  // A goal can only be set while nobody has pledged, so hide the form once it can't be used.
+  $('goalSetup').hidden = goal || t.pledgers > 0;
+  $('intro').textContent = goal
+    ? `${t.name}'s goal: ${fmt(t.target, t.unit)} ${UNIT_NAMES[t.unit]} ${t.label}. Settling charges each backer their stake × the share of the goal missed. Running it again never double-charges.`
+    : 'Settling charges every sponsor once, for the final distance, through Helcim. Running it again never double-charges.';
+  if (goal) {
+    $('total').textContent = `${fmt(t.progress, t.unit)} of ${fmt(t.target, t.unit)} ${UNIT_NAMES[t.unit]} · ${money(t.raised)} at stake of ${money(t.stakeTotal)}${t.hr ? ` · ♥ ${t.hr} bpm` : ''}${t.goalMet ? ' · goal met' : ''}${t.settled ? ' · settled' : ''}`;
+    $('head').innerHTML = '<tr><th>Backer</th><th>Stake</th><th>Amount</th><th>Status</th></tr>';
+    $('rows').innerHTML = t.pledges.length
+      ? t.pledges.map((p) => `<tr><td>${esc(p.name)}</td><td class="n">${money(p.stake)}</td><td class="n">${money(p.amount)}</td><td>${p.status === 'skipped' ? 'released' : p.status}</td></tr>`).join('')
+      : '<tr><td colspan="4">No confirmed backers yet.</td></tr>';
+  } else {
+    $('total').textContent = `${money(t.raised)} · ${t.km.toFixed(2)} km${t.settled ? ' · settled' : ''}`;
+    $('head').innerHTML = '<tr><th>Sponsor</th><th>$/km</th><th>Cap</th><th>Amount</th><th>Status</th></tr>';
+    $('rows').innerHTML = t.pledges.length
+      ? t.pledges.map((p) => `<tr><td>${esc(p.name)}</td><td class="n">${money(p.rate)}</td><td class="n">${money(p.cap)}</td><td class="n">${money(p.amount)}</td><td>${p.status}</td></tr>`).join('')
+      : '<tr><td colspan="5">No confirmed pledges yet.</td></tr>';
+  }
+}
+
+async function post(path, body) {
+  rememberKey();
+  const res = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json', 'x-relay-key': $('key').value }, body: JSON.stringify(body) });
+  return { ok: res.ok, out: await res.json() };
+}
+
+$('setGoal').addEventListener('click', async () => {
+  const body = { unit: $('unit').value, target: Number($('goalKm').value), logged: Number($('loggedKm').value || 0) };
+  if ($('label').value.trim()) body.label = $('label').value.trim();
+  if ($('who').value.trim()) body.name = $('who').value.trim();
+  const { ok, out } = await post(`${runnerPath()}/goal`, body);
+  if (!ok) return say(out.error);
+  say(`Goal set: ${fmt(out.target, out.unit)} ${UNIT_NAMES[out.unit]} ${out.label}. Share the pledge page now.`, true);
+  load();
+});
+
+$('settle').addEventListener('click', async () => {
+  say('Settling…');
+  const { ok, out } = await post(`${runnerPath()}/settle`, {});
+  if (!ok) return say(out.error);
+  const failed = out.results.filter((r) => r.status === 'failed');
+  if (failed.length) say(`${failed.length} charge(s) failed: ${failed.map((f) => `${f.name} (${f.error})`).join(', ')}`);
+  else say(out.total > 0 ? `Charged ${money(out.total)}.` : 'Nothing to charge.', true);
+  load();
+});
+$('runner').addEventListener('change', load);
+// Start on the same runner a bare pledge link goes to.
+(async () => {
+  try {
+    const c = await (await fetch('/api/config')).json();
+    if (c.defaultRunner) $('runner').value = c.defaultRunner;
+  } catch {}
+  load(); setInterval(load, 3000);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+# Secrets and local state: never commit these.
+.env
+server/data/
+*.der
+*.pem
+
+# Build output and editor/OS files
+**/bin/
+node_modules/
+**/.vscode/settings.json
+.DS_Store

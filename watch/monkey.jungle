@@ -1,0 +1,4 @@
+project.manifest = manifest.xml
+
+# Turn on the type checker once the app builds cleanly:
+# project.typecheck = 2

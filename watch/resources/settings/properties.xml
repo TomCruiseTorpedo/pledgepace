@@ -1,0 +1,8 @@
+<properties>
+    <!-- Edit these before building for a real watch: sideloaded apps never get
+         settings from the phone. In the simulator use File > Edit Persistent Storage. -->
+    <property id="serverUrl" type="string">https://YOUR-SERVER.trycloudflare.com</property>
+    <property id="runnerId" type="string">runner-1</property>
+    <property id="relayKey" type="string">none</property>
+    <property id="pollSeconds" type="number">5</property>
+</properties>

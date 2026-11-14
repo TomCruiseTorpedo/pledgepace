@@ -1,0 +1,16 @@
+{
+  "name": "pledgepace-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PledgePace server: friends stake money on your Garmin activity goal and pay only for the share you miss. Pledges collected with HelcimPay.js, settled through the Helcim Payment API.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "fake-runner": "node fake-runner.mjs",
+    "test": "node --test --test-timeout=10000"
+  }
+}

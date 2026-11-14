@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PledgePace</title>
+<!-- Add to Home Screen: opens full-screen with its own icon on iOS and Android. -->
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="PledgePace">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#f4f5f0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#060807" media="(prefers-color-scheme: dark)">
+<style>
+/* Sponsor page: the live number is the hero; the pledge form sits right under it.
+   Two modes, chosen per runner by the organizer: per-km pledges, or stakes on a goal.
+   System fonts only, so it loads on flaky event Wi-Fi. */
+:root{
+  --bg:#f4f5f0; --panel:#fff; --ink:#141714; --muted:#5b625c; --line:#d8ddd5;
+  --money:#1f7a3a; --accent:#c2410c; --accent-ink:#fff; --warn:#8a5a00;
+  --f:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#060807; --panel:#111513; --ink:#e8ede9; --muted:#98a29b; --line:#252c28;
+  --money:#5fd17e; --accent:#ff7a3d; --accent-ink:#000; --warn:#f2b44b; color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 var(--f)}
+.wrap{max-width:560px;margin:0 auto;padding:20px max(16px,env(safe-area-inset-left)) 48px}
+.brand{font:700 13px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.mode{display:inline-block;margin-left:8px;padding:3px 7px;border-radius:99px;border:1px solid var(--warn);color:var(--warn);font-size:11px}
+h1{font-size:22px;margin:6px 0 18px;text-wrap:balance}
+.tally{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 18px 14px}
+.raised{font:800 clamp(48px,14vw,72px)/1 var(--f);color:var(--money);font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+.raised small{font-size:.4em;color:var(--muted);font-weight:600;margin-left:6px;letter-spacing:0}
+.meter{height:10px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:14px}
+.meter span{display:block;height:100%;width:0;background:var(--money);transition:width .4s ease}
+@media (prefers-reduced-motion: reduce){.meter span{transition:none}}
+.stats{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:10px;color:var(--muted);font-variant-numeric:tabular-nums}
+.stats b{color:var(--ink)}
+.stats b.stake{color:var(--accent)}
+.state{margin-top:8px;font:600 12px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase}
+form{margin-top:18px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;display:grid;gap:14px}
+label{display:grid;gap:6px;font-weight:600}
+input{font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;width:100%}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips button{font:600 15px/1 var(--f);padding:10px 14px;border-radius:99px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer}
+.chips button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.fields{display:grid;gap:14px}
+.fields[hidden]{display:none}
+.hint{font-size:13px;color:var(--muted);font-weight:400}
+.go{font:700 17px/1 var(--f);padding:14px;border:0;border-radius:10px;background:var(--accent);color:var(--accent-ink);cursor:pointer}
+.go:disabled{opacity:.6;cursor:wait}
+button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.list{margin-top:18px}
+.list h2{font:600 12px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+.list ul{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+.list li{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+.list li span:last-child{color:var(--muted);white-space:nowrap;text-align:right}
+.msg{min-height:1.5em;font-weight:600}
+.msg.ok{color:var(--money)} .msg.err{color:var(--accent)}
+.fine{margin-top:16px;font-size:13px;color:var(--muted)}
+.consent{display:flex;gap:10px;align-items:flex-start;font-weight:400;font-size:14px;line-height:1.4}
+.consent input{width:auto;margin:2px 0 0;flex:none;accent-color:var(--accent)}
+.share{margin-top:12px;font:600 14px/1 var(--f);padding:9px 14px;border-radius:99px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer}
+/* Phones: the main button stays pinned to the bottom of the screen, tap targets are at
+   least 44px, and the page clears the iPhone home indicator. */
+@media (max-width: 600px){
+  .wrap{padding-top:max(16px,env(safe-area-inset-top));padding-bottom:calc(32px + env(safe-area-inset-bottom))}
+  h1{font-size:20px;margin-bottom:14px}
+  .tally{padding:16px 16px 12px}
+  .chips button{min-height:44px;padding:12px 16px}
+  .share{min-height:40px}
+  .consent{font-size:15px}
+  .consent input{width:22px;height:22px;margin-top:0}
+  .go{position:sticky;bottom:calc(12px + env(safe-area-inset-bottom));z-index:2;min-height:52px;box-shadow:0 8px 24px rgb(0 0 0 / .28)}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">PledgePace <span class="mode" id="mode" hidden></span></div>
+  <h1 id="title">Pledge per kilometre</h1>
+
+  <section class="tally" aria-live="polite">
+    <div class="raised"><span id="hero">$0.00</span><small id="heroLabel">raised</small></div>
+    <div class="meter" id="meter" hidden><span id="meterFill"></span></div>
+    <div class="stats" id="stats"></div>
+    <div class="state" id="state">Waiting for the runner to start</div>
+    <button type="button" class="share" id="share">Share this page</button>
+  </section>
+
+  <form id="form" novalidate>
+    <label>Your name
+      <input id="name" maxlength="40" autocomplete="name" required>
+    </label>
+    <div class="fields" id="perKmFields">
+      <div>
+        <div style="font-weight:600;margin-bottom:6px">Dollars per kilometre</div>
+        <div class="chips" id="rateChips">
+          <button type="button" data-v="0.5" aria-pressed="false">$0.50</button>
+          <button type="button" data-v="1" aria-pressed="false">$1</button>
+          <button type="button" data-v="2" aria-pressed="true">$2</button>
+          <button type="button" data-v="5" aria-pressed="false">$5</button>
+        </div>
+      </div>
+      <div class="row">
+        <label>Custom $/km <input id="rateInput" type="number" min="0.01" max="20" step="0.01" value="2" inputmode="decimal"></label>
+        <label>Cap ($) <input id="cap" type="number" min="1" max="500" step="1" value="50" inputmode="numeric"></label>
+      </div>
+    </div>
+    <div class="fields" id="stakeFields" hidden>
+      <div>
+        <div style="font-weight:600;margin-bottom:6px">Your stake</div>
+        <div class="chips" id="stakeChips">
+          <button type="button" data-v="5" aria-pressed="false">$5</button>
+          <button type="button" data-v="10" aria-pressed="false">$10</button>
+          <button type="button" data-v="20" aria-pressed="true">$20</button>
+          <button type="button" data-v="50" aria-pressed="false">$50</button>
+        </div>
+      </div>
+      <label>Custom stake ($) <input id="stakeInput" type="number" min="1" max="500" step="1" value="20" inputmode="numeric"></label>
+    </div>
+    <div class="hint" id="explain"></div>
+    <label class="consent"><input type="checkbox" id="consent"><span id="consentText"></span></label>
+    <button class="go" id="go">Pledge with card</button>
+    <div class="msg" id="msg" role="status"></div>
+  </form>
+
+  <section class="list">
+    <h2 id="listTitle">Sponsors</h2>
+    <ul id="sponsors"><li><span>No pledges yet. Be the first.</span><span></span></li></ul>
+  </section>
+
+  <p class="fine" id="fine">Card details are entered in Helcim's secure payment window and never touch this site. Your card is checked now and charged once, after the run.</p>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let runner = new URLSearchParams(location.search).get('runner'); // filled from /api/config when absent
+const money = (n) => '$' + Number(n || 0).toFixed(2);
+const km = (n) => Number(n || 0).toFixed(2);
+// Goal units and the Garmin sensor behind each: km (GPS), steps (accelerometer),
+// floors (barometer), minutes (heart rate at or above zone 2).
+const UNIT_NAMES = { km: 'km', steps: 'steps', floors: 'floors', minutes: 'active min' };
+const unitName = (u) => UNIT_NAMES[u] || u;
+const fmt = (n, u) => (u === 'km' ? km(n) : Math.floor(Number(n || 0)).toLocaleString('en-CA'));
+let config = { mock: true, currency: 'CAD' };
+let finished = false;
+let mode = null; // 'perKm' or 'goal', from the server
+let who = runner; // the goal-setter's name, from the server
+
+function rate() { return Number($('rateInput').value); }
+function stake() { return Number($('stakeInput').value); }
+function say(text, kind) { $('msg').textContent = text; $('msg').className = 'msg ' + (kind || ''); }
+function guide(id) {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  $(id).scrollIntoView({ block: 'center', behavior: reduce ? 'auto' : 'smooth' });
+  $(id).focus({ preventScroll: true });
+}
+function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
+
+function explain() {
+  $('explain').textContent = mode === 'goal'
+    ? `If ${who} misses the goal, you're charged ${money(stake())} × the share of the goal they missed. If they hit it, you're charged nothing.`
+    : `You'll be charged ${money(rate())} × the final distance, up to ${money($('cap').value)}, once the run ends.`;
+  const consent = mode === 'goal'
+    ? `I authorize a charge of up to ${money(stake())} to my card if ${who} misses this goal, and nothing if they meet it.`
+    : `I authorize a charge of ${money(rate())} per km, up to ${money($('cap').value)}, to my card after the run.`;
+  // Consent always matches the amount on screen: changing the amount clears the tick.
+  if ($('consentText').textContent !== consent) {
+    $('consentText').textContent = consent;
+    $('consent').checked = false;
+  }
+}
+
+// Chip rows mirror their number input, both ways.
+function wireChips(chipsId, inputId) {
+  const sync = () => $(chipsId).querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(Number(x.dataset.v) === Number($(inputId).value))));
+  $(chipsId).addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    $(inputId).value = b.dataset.v; sync(); explain();
+  });
+  $(inputId).addEventListener('input', () => { sync(); explain(); });
+}
+wireChips('rateChips', 'rateInput');
+wireChips('stakeChips', 'stakeInput');
+$('cap').addEventListener('input', explain);
+
+function applyMode(t) {
+  mode = t.mode;
+  who = t.name || runner;
+  const isGoal = mode === 'goal';
+  $('perKmFields').hidden = isGoal;
+  $('stakeFields').hidden = !isGoal;
+  $('meter').hidden = !isGoal;
+  $('go').textContent = isGoal ? 'Back with card' : 'Pledge with card';
+  $('listTitle').textContent = isGoal ? 'Backers' : 'Sponsors';
+  $('title').textContent = isGoal ? `Back ${who}'s goal: ${fmt(t.target, t.unit)} ${unitName(t.unit)} ${t.label}` : `Pledge per kilometre for ${runner}`;
+  $('fine').textContent = isGoal
+    ? "Card details are entered in Helcim's secure payment window and never touch this site. Your card is checked now and charged at most once, at the end, only for the share of the goal that was missed."
+    : "Card details are entered in Helcim's secure payment window and never touch this site. Your card is checked now and charged once, after the run.";
+  explain();
+}
+
+async function api(path, body) {
+  const res = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {});
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+function runState(t) {
+  if (mode === 'goal') {
+    return t.recording ? `${who} is moving` : t.updatedAt ? `${who}'s watch is connected` : `waiting for ${who}'s watch`;
+  }
+  return t.settled ? 'Run finished · pledges settled' : t.finished ? 'Run finished' : t.recording ? 'Runner is moving' : t.updatedAt ? 'Runner paused' : 'Waiting for the runner to start';
+}
+
+function render(t) {
+  if (t.mode !== mode) applyMode(t);
+  finished = t.finished;
+  $('go').disabled = t.finished;
+  if (mode === 'goal') {
+    const u = t.unit;
+    $('hero').textContent = fmt(t.progress, u);
+    $('heroLabel').textContent = `of ${fmt(t.target, u)} ${unitName(u)}`;
+    $('meterFill').style.width = Math.min(100, (100 * t.progress) / t.target) + '%';
+    $('stats').innerHTML = `<span><b class="stake">${money(t.raised)}</b> ${t.settled ? 'charged' : 'at stake'}</span><span><b>${money(t.stakeTotal)}</b> staked</span><span><b>${t.pledgers}</b> ${t.pledgers === 1 ? 'backer' : 'backers'}</span>`
+      + (t.hr ? `<span>♥ <b>${t.hr}</b> bpm</span>` : '');
+    const left = Math.max(0, t.target - t.progress);
+    $('state').textContent = t.goalMet ? 'Goal met · nobody is charged'
+      : t.settled ? 'Settled · goal missed'
+      : t.finished ? `Finished · ${fmt(left, u)} ${unitName(u)} short`
+      : `${fmt(left, u)} ${unitName(u)} to go · ${runState(t)}`;
+    $('sponsors').innerHTML = t.pledges.length
+      ? t.pledges.map((p) => `<li><span>${esc(p.name)} · ${money(p.stake)} stake</span><span>${
+          p.status === 'charged' ? money(p.amount) + ' charged' : p.status === 'skipped' ? 'released' : p.status === 'failed' ? 'declined' : money(p.amount) + ' at stake'}</span></li>`).join('')
+      : '<li><span>No backers yet. Be the first.</span><span></span></li>';
+  } else {
+    $('hero').textContent = money(t.raised);
+    $('heroLabel').textContent = 'raised';
+    $('stats').innerHTML = `<span><b>${km(t.km)}</b> km</span><span><b>${money(t.ratePerKm)}</b>/km combined</span><span><b>${t.pledgers}</b> ${t.pledgers === 1 ? 'sponsor' : 'sponsors'}</span>`;
+    $('state').textContent = runState(t);
+    $('sponsors').innerHTML = t.pledges.length
+      ? t.pledges.map((p) => `<li><span>${esc(p.name)} · ${money(p.rate)}/km</span><span>${money(p.amount)}${p.status === 'charged' ? ' ✓' : p.status === 'failed' ? ' (declined)' : ''}</span></li>`).join('')
+      : '<li><span>No pledges yet. Be the first.</span><span></span></li>';
+  }
+}
+
+async function confirm(pledgeId, eventMessage) {
+  const t = await api(`/api/pledges/${pledgeId}/confirm`, { eventMessage });
+  render(t);
+  say(mode === 'goal' ? "Thanks! You're backing the goal." : 'Thanks! Your pledge is in.', 'ok');
+  $('name').value = '';
+  $('consent').checked = false;
+}
+
+$('share').addEventListener('click', async () => {
+  const text = mode === 'goal' ? `Back ${who}'s goal on PledgePace` : `Pledge per km for ${who} on PledgePace`;
+  try {
+    // Always share a link that names the runner, so it can't fall back to another goal.
+    const url = `${location.origin}${location.pathname}?runner=${encodeURIComponent(runner)}`;
+    if (navigator.share) return await navigator.share({ title: 'PledgePace', text, url });
+    await navigator.clipboard.writeText(url);
+    say('Link copied.', 'ok');
+  } catch {
+    // share sheet dismissed, or clipboard blocked: nothing to do
+  }
+});
+
+$('form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  // With the button pinned on phones, the missing field may be off screen: bring it into view.
+  if (!$('name').value.trim()) { guide('name'); return say('Add your name first.', 'err'); }
+  if (finished) return say('This run has already finished.', 'err');
+  if (!$('consent').checked) { guide('consent'); return say('Tick the box to authorize the charge first.', 'err'); }
+  $('go').disabled = true; say('Opening secure card window…');
+  try {
+    const terms = mode === 'goal' ? { stake: stake() } : { rate: rate(), cap: Number($('cap').value) };
+    const { pledgeId, checkoutToken, mock } = await api('/api/pledges', { runner, name: $('name').value, consent: true, ...terms });
+    if (mock) return await confirm(pledgeId, null); // mock mode: no card window
+    if (typeof appendHelcimPayIframe !== 'function') throw new Error('HelcimPay.js did not load. This page must be served over HTTPS.');
+    const key = 'helcim-pay-js-' + checkoutToken;
+    const onMessage = async (event) => {
+      if (event.data?.eventName !== key) return;
+      if (event.data.eventStatus === 'SUCCESS') {
+        window.removeEventListener('message', onMessage);
+        try { await confirm(pledgeId, event.data.eventMessage); } catch (err) { say(err.message, 'err'); }
+      } else if (event.data.eventStatus === 'ABORTED') {
+        say('Card not accepted. Nothing was charged.', 'err');
+      } else if (event.data.eventStatus === 'HIDE') {
+        window.removeEventListener('message', onMessage);
+        if (!$('msg').classList.contains('ok')) say('');
+      }
+    };
+    window.addEventListener('message', onMessage);
+    appendHelcimPayIframe(checkoutToken);
+    say('');
+  } catch (err) {
+    say(err.message, 'err');
+  } finally {
+    $('go').disabled = finished;
+  }
+});
+
+async function poll() { try { render(await api(`/api/runs/${encodeURIComponent(runner)}`)); } catch {} }
+
+(async () => {
+  try { config = await api('/api/config'); } catch {}
+  runner = runner || config.defaultRunner || 'runner-1';
+  who = runner;
+  if (config.mock) { $('mode').hidden = false; $('mode').textContent = 'Mock payments'; }
+  else {
+    $('mode').hidden = false; $('mode').textContent = 'Helcim test account';
+    const s = document.createElement('script');
+    s.src = 'https://secure.helcim.app/helcim-pay/services/start.js';
+    document.head.appendChild(s);
+  }
+  poll(); setInterval(poll, 2000);
+})();
+</script>
+</body>
+</html>

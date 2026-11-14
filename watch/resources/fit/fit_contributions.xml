@@ -1,0 +1,11 @@
+<resources>
+    <!-- Ids match the createField calls in PledgeSession.mc. Garmin Connect may only
+         chart these for store-installed apps; check with a sideloaded build early. -->
+    <fitContributions>
+        <fitField id="0" displayInChart="true" sortOrder="0" precision="2"
+            chartTitle="@Strings.RaisedChartTitle" dataLabel="@Strings.RaisedLabel"
+            unitLabel="@Strings.DollarUnits" fillColor="#1F7A3A" />
+        <fitField id="1" displayInActivitySummary="true" sortOrder="1" precision="2"
+            dataLabel="@Strings.TotalLabel" unitLabel="@Strings.DollarUnits" />
+    </fitContributions>
+</resources>

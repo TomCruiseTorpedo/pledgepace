@@ -1,0 +1,5 @@
+{
+  "monkeyC.developerKeyPath": "/path/to/developer_key.der",
+  "monkeyC.javaPath": "/path/to/a/java-21/home",
+  "monkeyC.typeCheckLevel": "Default"
+}
