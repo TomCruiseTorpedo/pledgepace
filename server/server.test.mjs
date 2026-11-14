@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { createPledgeServer, pledgeAmount, stakeAmount, bump, counted } from './server.mjs';
 import { createHelcim, validResponse, hashCandidates } from './helcim.mjs';
+import { createHelcimSimulator } from './helcim-sim.mjs';
 
 const json = (b, status = 200) => new Response(JSON.stringify(b), { status, headers: { 'content-type': 'application/json' } });
 const sign = (data, secret) => createHash('sha256').update(JSON.stringify(data) + secret).digest('hex');
@@ -511,4 +512,58 @@ test('charity nudges talk about money raised, not money at stake', async (ctx) =
 test('payOn is validated', async (ctx) => {
   const r = await start(ctx);
   assert.equal((await r.post('/api/runs/x1/goal', { unit: 'steps', target: 1000, payOn: 'whenever' })).status, 400);
+});
+
+// ---- simulated Helcim (HELCIM_SIMULATE=1) -------------------------------------------
+
+async function startSimulated(ctx) {
+  const simulator = createHelcimSimulator();
+  const helcim = createHelcim({ apiToken: 'simulated', fetchImpl: simulator.fetchImpl });
+  const r = await start(ctx, { helcim, simulator });
+  return { r, simulator };
+}
+
+test('the simulated card window runs the real Helcim path end to end', async (ctx) => {
+  const { r, simulator } = await startSimulated(ctx);
+  assert.equal((await r.get('/api/config')).simulated, true);
+  const started = await r.post('/api/pledges', { runner: 'r1', consent: true, name: 'Ivy', rate: 2, cap: 40 });
+  assert.equal(started.status, 201);
+  assert.equal(started.body.mock, false, 'the page takes the real HelcimPay.js path');
+  const card = await r.post('/sim-helcim/pay', { checkoutToken: started.body.checkoutToken, cardNumber: '4124 9399 9999 9990', expiry: '01/28', cvv: '100' });
+  assert.equal(card.body.eventStatus, 'SUCCESS');
+  assert.doesNotMatch(JSON.stringify(card.body), /4124939999999990/, 'the full card number never comes back');
+  const confirmed = await r.post(`/api/pledges/${started.body.pledgeId}/confirm`, { eventMessage: card.body.eventMessage });
+  assert.equal(confirmed.status, 200, 'the real hash check accepts the simulated signature');
+  await r.post('/api/runs/r1/telemetry', { dist: 5000 });
+  const settled = await r.post('/api/runs/r1/settle', {});
+  assert.equal(settled.body.results[0].status, 'charged');
+  assert.equal(settled.body.total, 10);
+  await r.post('/api/runs/r1/settle', {});
+  assert.equal(simulator.purchaseCount(), 1, 'settling twice charges once');
+});
+
+test('the simulated window takes only the test card, and can decline on request', async (ctx) => {
+  const { r } = await startSimulated(ctx);
+  const started = await r.post('/api/pledges', { runner: 'r1', consent: true, name: 'Ivy', rate: 2, cap: 40 });
+  const token = started.body.checkoutToken;
+  const real = await r.post('/sim-helcim/pay', { checkoutToken: token, cardNumber: '4111 1111 1111 1111', expiry: '01/28', cvv: '100' });
+  assert.equal(real.status, 400, 'any other card number is refused');
+  const declined = await r.post('/sim-helcim/pay', { checkoutToken: token, cardNumber: '4124939999999990', expiry: '01/28', cvv: '100', decline: true });
+  assert.equal(declined.body.eventStatus, 'ABORTED');
+  const again = await r.post('/sim-helcim/pay', { checkoutToken: token, cardNumber: '4124939999999990', expiry: '01/28', cvv: '100' });
+  assert.equal(again.status, 409, 'a checkout is used once');
+  const forged = await r.post(`/api/pledges/${started.body.pledgeId}/confirm`, { eventMessage: { data: { status: 'APPROVED', cardToken: 'simtok_x' }, hash: 'f'.repeat(64) } });
+  assert.equal(forged.status, 400, 'an unsigned response is still rejected');
+});
+
+test('the simulated window and its script are served only in simulated mode', async (ctx) => {
+  const { r } = await startSimulated(ctx);
+  const base = `http://127.0.0.1:${r.app.server.address().port}`;
+  const js = await fetch(base + '/sim-helcim/start.js');
+  assert.match(js.headers.get('content-type'), /javascript/);
+  assert.match(await js.text(), /appendHelcimPayIframe/);
+  const page = await fetch(base + '/sim-helcim/pay?checkoutToken=x');
+  assert.match(await page.text(), /Simulated card window/);
+  const plain = await start(ctx);
+  assert.equal((await fetch(`http://127.0.0.1:${plain.app.server.address().port}/sim-helcim/start.js`)).status, 404);
 });

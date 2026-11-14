@@ -18,6 +18,15 @@ Taken from Helcim's developer docs as of October 23rd, 2026. Check them again be
 - **Rate limit:** 5 concurrent calls per account, so settlement charges one backer at a time.
 - **No split payments:** every charge settles into one merchant account (the organizer's or a charity's).
 
+## Simulated mode (no account needed)
+
+`HELCIM_SIMULATE=1` (with no `HELCIM_API_TOKEN`) runs the real client in `helcim.mjs` against an in-process fake (`helcim-sim.mjs`):
+
+- `initialize` and `purchase` answer the way the Helcim API does, including idempotent replays of the same key.
+- The pledge page loads a local stand-in for HelcimPay.js, which opens a clearly labelled **simulated** card window, styled as PledgePace rather than Helcim.
+- The window accepts only Helcim's published test card, `4124 9399 9999 9990`. The page refuses any other number before sending it, the server refuses it again, and no card number is stored or logged.
+- The fake signs its response with the checkout's secret exactly as HelcimPay.js does, so the real signature check, card-token storage and settlement all run unchanged. A "Simulate a declined card" box exercises the decline path.
+
 ## Running against a Helcim developer test account
 
 1. Ask Helcim for a developer test account; their [developer testing](https://devdocs.helcim.com/docs/developer-testing) page explains how. It requires an existing merchant ID.

@@ -326,11 +326,13 @@ async function poll() { try { render(await api(`/api/runs/${encodeURIComponent(r
   try { config = await api('/api/config'); } catch {}
   runner = runner || config.defaultRunner || 'runner-1';
   who = runner;
-  if (config.mock) { $('mode').hidden = false; $('mode').textContent = 'Mock payments'; }
+  $('mode').hidden = false;
+  if (config.mock) $('mode').textContent = 'Mock payments';
   else {
-    $('mode').hidden = false; $('mode').textContent = 'Helcim test account';
+    // Simulated mode loads a local stand-in for HelcimPay.js; otherwise Helcim's own script.
+    $('mode').textContent = config.simulated ? 'Simulated payments' : 'Helcim test account';
     const s = document.createElement('script');
-    s.src = 'https://secure.helcim.app/helcim-pay/services/start.js';
+    s.src = config.simulated ? '/sim-helcim/start.js' : 'https://secure.helcim.app/helcim-pay/services/start.js';
     document.head.appendChild(s);
   }
   poll(); setInterval(poll, 2000);

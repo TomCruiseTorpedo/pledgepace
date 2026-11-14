@@ -13,7 +13,7 @@ All bodies are JSON, and every POST must send `content-type: application/json` (
 
 ## Reading
 
-`GET /api/config` returns `{ mock, currency, milestone, defaultRunner }`.
+`GET /api/config` returns `{ mock, simulated, currency, milestone, defaultRunner }`. In simulated mode the server also serves `GET /sim-helcim/start.js`, `GET /sim-helcim/pay` (the simulated card window) and `POST /sim-helcim/pay` (test card only); see [helcim.md](helcim.md).
 
 `GET /api/runs/:runner` returns the live tally:
 

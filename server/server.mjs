@@ -11,6 +11,7 @@ import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createHelcim, isApproved, validResponse } from './helcim.mjs';
+import { createHelcimSimulator } from './helcim-sim.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PAGES = { '/': 'index.html', '/index.html': 'index.html', '/organizer': 'organizer.html', '/organizer.html': 'organizer.html' };
@@ -97,6 +98,7 @@ export function createPledgeServer({
   defaultRunner = '',
   nudgeEveryMin = 60,
   trustProxy = false,
+  simulator = null, // createHelcimSimulator() when HELCIM_SIMULATE=1: serves the simulated card window
   now = () => Date.now(),
 } = {}) {
   const runs = new Map();
@@ -295,10 +297,11 @@ export function createPledgeServer({
       if (req.method === 'POST' && !/^application\/json\b/i.test(String(req.headers['content-type'] ?? ''))) {
         return send(res, 415, { error: 'send JSON with content-type: application/json' });
       }
+      if (simulator && path.startsWith('/sim-helcim/') && (await simulator.handle(req, res, path, { readJson, send }))) return;
       if (req.method === 'GET' && path === '/api/config') {
         // A bare pledge link (no ?runner=) goes to DEFAULT_RUNNER, else the most recently set open goal.
         const latest = [...runs.values()].filter((r) => r.goal && !r.finished).sort((a, b) => (b.goal.setAt ?? 0) - (a.goal.setAt ?? 0))[0];
-        return send(res, 200, { mock: helcim.mock, currency, milestone, defaultRunner: defaultRunner || latest?.id || 'runner-1' });
+        return send(res, 200, { mock: helcim.mock, simulated: Boolean(simulator), currency, milestone, defaultRunner: defaultRunner || latest?.id || 'runner-1' });
       }
 
       let m = path.match(/^\/api\/runs\/([^/]+)$/);
@@ -490,10 +493,15 @@ function readJson(req) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const port = Number(process.env.PORT ?? 8788);
   const host = process.env.HOST ?? '127.0.0.1';
-  const helcim = createHelcim({ apiToken: process.env.HELCIM_API_TOKEN ?? '' });
+  // HELCIM_SIMULATE=1 (and no real token) runs the real Helcim client against an in-process
+  // fake, with a simulated card window that accepts only Helcim's test card.
+  const simulator = process.env.HELCIM_SIMULATE === '1' && !process.env.HELCIM_API_TOKEN ? createHelcimSimulator() : null;
+  const helcim = simulator
+    ? createHelcim({ apiToken: 'simulated', fetchImpl: simulator.fetchImpl })
+    : createHelcim({ apiToken: process.env.HELCIM_API_TOKEN ?? '' });
   // Fail closed: with real payments and no relay key, anyone who can reach the server could
-  // set goals and settle charges. Mock mode stays open for local development.
-  if (!helcim.mock && !process.env.RELAY_KEY) {
+  // set goals and settle charges. Mock and simulated modes move no money and stay open for development.
+  if (process.env.HELCIM_API_TOKEN && !process.env.RELAY_KEY) {
     console.error('Refusing to start: HELCIM_API_TOKEN is set but RELAY_KEY is not. Set RELAY_KEY so only you can set goals and settle charges.');
     process.exit(1);
   }
@@ -501,6 +509,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     helcim,
     relayKey: process.env.RELAY_KEY ?? '',
     trustProxy: process.env.TRUST_PROXY === '1',
+    simulator,
     milestone: Number(process.env.MILESTONE ?? 25),
     autoSettle: process.env.AUTO_SETTLE === '1',
     dataFile: process.env.DATA_FILE ?? join(HERE, 'data', 'state.json'),
@@ -509,7 +518,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   });
   server.listen(port, host, () => {
     console.log(`PledgePace on http://${host}:${port}  (pledge page at /, organizer at /organizer)`);
-    console.log(helcim.mock ? 'MOCK MODE: no HELCIM_API_TOKEN, so no real Helcim calls.' : 'Helcim LIVE API: use a developer test account and test cards.');
+    console.log(simulator ? 'SIMULATED HELCIM: real client code against an in-process fake; test card 4124 9399 9999 9990 only.'
+      : helcim.mock ? 'MOCK MODE: no HELCIM_API_TOKEN, so no real Helcim calls.' : 'Helcim LIVE API: use a developer test account and test cards.');
     if (!process.env.RELAY_KEY) console.log('RELAY_KEY not set: anyone with the URL can settle the run.');
   });
 }
