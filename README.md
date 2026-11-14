@@ -47,7 +47,7 @@ Sensor goals count from the moment the goal is set and survive the watch's midni
 - **Phone-first pledge page.** Pinned "Back with card" button, an explicit consent box stating the most that can be charged, a share button, and Add to Home Screen with its own icon.
 - **Fair by design.** Stakes are capped at $500, a goal locks as soon as anyone backs it so terms never change after commitment, and a pledge without consent is refused before Helcim is contacted.
 - **Per-km charity mode.** Runners without a goal take classic pledges per kilometre with a cap.
-- **No dependencies.** The server is plain Node 20+ with no `npm install`, and 27 tests run with `node --test`.
+- **No dependencies.** The server is plain Node 20+ with no `npm install`, and 31 tests run with `node --test`.
 
 ## Quick start
 
@@ -85,7 +85,8 @@ Copy `server/.env.example` to `server/.env` and run `node --env-file=.env server
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `HELCIM_API_TOKEN` | empty (mock mode) | A Helcim **developer test account** token. Never a live one. |
-| `RELAY_KEY` | empty | Shared secret for goal setup, watch telemetry, nudges and settlement. Set it whenever the server is reachable from the internet. |
+| `RELAY_KEY` | empty | Shared secret for goal setup, watch telemetry, nudges and settlement. Set it whenever the server is reachable from the internet. With a `HELCIM_API_TOKEN` the server refuses to start without it. |
+| `TRUST_PROXY` | 0 | 1 believes `X-Forwarded-For` / `CF-Connecting-IP` for the cardholder IP sent to Helcim. Turn it on only behind a proxy or tunnel you run. |
 | `DATA_FILE` | `server/data/state.json` | Where goals, pledges and card tokens are saved. |
 | `DEFAULT_RUNNER` | the most recent open goal | Which goal a bare pledge link opens. |
 | `NUDGE_EVERY_MIN` | 60 | Least time between "steps to go" reminders. |
@@ -105,7 +106,7 @@ docs/     API, Helcim notes, simulator guide, screenshots
 
 ## What's verified
 
-- **Server:** 27 tests. They run the real Helcim code path against a fake Helcim API and check URLs, headers and body fields. The money rules were each broken on purpose to confirm a test fails: the per-km cap, the hash check, the no-double-charge guard, the stake share, required consent, the goal lock, sensor counters and nudge de-duplication.
+- **Server:** 31 tests. They run the real Helcim code path against a fake Helcim API and check URLs, headers and body fields. The money rules were each broken on purpose to confirm a test fails: the per-km cap, the hash check, the no-double-charge guard, the stake share, required consent, the goal lock, sensor counters, nudge de-duplication, and the security checks (JSON-only POSTs, trusted-proxy IPs, generic error messages, refusing to run real payments without a key).
 - **Browser:** pledging, consent, settlement and the phone layout, checked at 375px through a public HTTPS tunnel.
 - **Connect IQ simulator (SDK 9.1.0, fēnix 7 and 7 Pro):** steps and km goals through to GOAL MET and settlement, heart rate and zone time reaching the server, a background nudge shown as a notification, and recovery from a wrong key or a stopped server.
 - **Not verified yet:** a physical watch; a real Helcim test account; nudges while the app is closed (the simulator only fires background events for the running app); a nonzero floors reading; Garmin Connect charting the custom FIT fields of a sideloaded app.

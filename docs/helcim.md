@@ -31,4 +31,4 @@ There is no separate sandbox host: test accounts use the production API. **Never
 ## Open questions
 
 - Whether a $0 verify response reports `status` as `APPROVED`. The code assumes it; a test card would settle it.
-- Whether Helcim accepts a tunnel's `ipAddress` on test purchases. The server forwards `cf-connecting-ip` or `x-forwarded-for` when present.
+- Whether Helcim accepts a tunnel's `ipAddress` on test purchases. Behind a tunnel the socket address is the tunnel itself; set `TRUST_PROXY=1` to send the `X-Forwarded-For` / `CF-Connecting-IP` address instead (only behind a proxy you run, or anyone could choose the IP Helcim records).

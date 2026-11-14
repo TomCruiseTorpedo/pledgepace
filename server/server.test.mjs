@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { createPledgeServer, pledgeAmount, stakeAmount, bump, counted } from './server.mjs';
 import { createHelcim, validResponse, hashCandidates } from './helcim.mjs';
 
@@ -406,4 +407,58 @@ test('the home-screen manifest and icons are served with the right types', async
     assert.equal(res.headers.get('content-type'), icon.type, icon.src);
   }
   assert.equal((await fetch(base + '/icon-180.png')).status, 200, 'apple-touch-icon');
+});
+
+// ---- security hardening ------------------------------------------------------------
+
+test('a POST that is not application/json is refused before anything runs', async (ctx) => {
+  const r = await start(ctx);
+  const app = r.app;
+  const base = `http://127.0.0.1:${app.server.address().port}`;
+  const res = await fetch(base + '/api/runs/r1/settle', { method: 'POST', body: '{}' }); // text/plain: a cross-site form can send this
+  assert.equal(res.status, 415);
+  assert.equal(app.runs.get('r1'), undefined, 'the request never reached the settle route');
+});
+
+test('forwarded client IPs are believed only when TRUST_PROXY is on', async (ctx) => {
+  for (const trustProxy of [false, true]) {
+    const { calls, helcim } = fakeHelcimApi();
+    const r = await start(ctx, { helcim, trustProxy });
+    const started = await r.post('/api/pledges', { runner: 'r1', consent: true, name: 'Ivy', rate: 1, cap: 10 }, { 'x-forwarded-for': '203.0.113.7' });
+    const secret = `sec_${calls.length}`;
+    const data = { status: 'APPROVED', type: 'verify', cardToken: 'tok_ivy' };
+    await r.post(`/api/pledges/${started.body.pledgeId}/confirm`, { eventMessage: { data, hash: sign(data, secret) } });
+    await r.post('/api/runs/r1/telemetry', { dist: 3000 });
+    await r.post('/api/runs/r1/settle', {});
+    const ip = calls.find((c) => c.url.endsWith('/payment/purchase')).body.ipAddress;
+    if (trustProxy) assert.equal(ip, '203.0.113.7');
+    else assert.notEqual(ip, '203.0.113.7', 'a spoofed header must not reach Helcim');
+  }
+});
+
+test('payment-provider errors are logged, not shown to the caller', async (ctx) => {
+  const fetchImpl = async () => new Response(JSON.stringify({ errors: 'internal helcim detail 42' }), { status: 500, headers: { 'content-type': 'application/json' } });
+  const r = await start(ctx, { helcim: createHelcim({ apiToken: 't', fetchImpl }) });
+  const realError = console.error;
+  console.error = () => {}; // keep the expected server-side log out of the test output
+  try {
+    const res = await r.post('/api/pledges', { runner: 'r1', consent: true, name: 'Ivy', rate: 1, cap: 10 });
+    assert.equal(res.status, 502);
+    assert.doesNotMatch(JSON.stringify(res.body), /internal helcim detail/);
+  } finally {
+    console.error = realError;
+  }
+  const bad = await r.post('/api/pledges', { runner: 'bad id!', consent: true, name: 'Ivy', rate: 1, cap: 10 });
+  assert.equal(bad.body.error, 'bad runner id', 'validation errors are still explained');
+});
+
+test('the server refuses to start with real Helcim and no relay key', () => {
+  const out = spawnSync(process.execPath, ['server.mjs'], {
+    cwd: new URL('.', import.meta.url),
+    env: { ...process.env, HELCIM_API_TOKEN: 'test-token', RELAY_KEY: '', PORT: '0', DATA_FILE: '/dev/null' },
+    timeout: 5000,
+    encoding: 'utf8',
+  });
+  assert.equal(out.status, 1, `expected exit 1, got ${out.status} (signal ${out.signal})`);
+  assert.match(out.stderr, /RELAY_KEY/);
 });

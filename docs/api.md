@@ -1,6 +1,6 @@
 # HTTP API
 
-All bodies are JSON. Routes marked **key** need the `x-relay-key` header when `RELAY_KEY` is set. Runner ids are 1 to 40 letters, digits, `-` or `_`.
+All bodies are JSON, and every POST must send `content-type: application/json` (anything else gets 415, which also blocks cross-site form posts). Errors from Helcim or the server itself are logged and answered with a generic message. Routes marked **key** need the `x-relay-key` header when `RELAY_KEY` is set. Runner ids are 1 to 40 letters, digits, `-` or `_`.
 
 ## Pages
 

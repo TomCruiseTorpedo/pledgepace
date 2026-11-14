@@ -93,6 +93,7 @@ export function createPledgeServer({
   dataFile = null,
   defaultRunner = '',
   nudgeEveryMin = 60,
+  trustProxy = false,
   now = () => Date.now(),
 } = {}) {
   const runs = new Map();
@@ -250,9 +251,14 @@ export function createPledgeServer({
     return given.length === want.length && timingSafeEqual(given, want);
   }
 
+  // Forwarding headers are believed only behind a proxy you run (TRUST_PROXY=1, for example a
+  // tunnel); otherwise anyone could choose the IP address Helcim records for their payment.
   function clientIp(req) {
-    const fwd = req.headers['cf-connecting-ip'] ?? String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim();
-    return fwd || req.socket.remoteAddress || '0.0.0.0';
+    if (trustProxy) {
+      const fwd = req.headers['cf-connecting-ip'] ?? String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim();
+      if (fwd) return fwd;
+    }
+    return req.socket.remoteAddress || '0.0.0.0';
   }
 
   async function handle(req, res) {
@@ -271,6 +277,11 @@ export function createPledgeServer({
         return res.end(body);
       }
       if (req.method === 'GET' && path === '/health') return send(res, 200, { ok: true });
+      // Browsers cannot send a cross-site application/json POST without a CORS preflight, which
+      // this server never approves, so requiring it blocks cross-site form posts.
+      if (req.method === 'POST' && !/^application\/json\b/i.test(String(req.headers['content-type'] ?? ''))) {
+        return send(res, 415, { error: 'send JSON with content-type: application/json' });
+      }
       if (req.method === 'GET' && path === '/api/config') {
         // A bare pledge link (no ?runner=) goes to DEFAULT_RUNNER, else the most recently set open goal.
         const latest = [...runs.values()].filter((r) => r.goal && !r.finished).sort((a, b) => (b.goal.setAt ?? 0) - (a.goal.setAt ?? 0))[0];
@@ -421,9 +432,11 @@ export function createPledgeServer({
 
       return send(res, 404, { error: 'not found' });
     } catch (err) {
-      if (err.status === 400 || err.status === 413) return send(res, err.status, { error: err.message });
+      // Only our own request-validation errors reach the caller. Anything else, such as a Helcim
+      // error or a file error, is logged here and answered with a generic message.
+      if (err.expose) return send(res, err.status, { error: err.message });
       console.error(err);
-      return send(res, 502, { error: err.message });
+      return send(res, 502, { error: 'something went wrong on the server or at the payment provider; details are in the server log' });
     }
   }
 
@@ -442,7 +455,7 @@ function readJson(req) {
     req.on('data', (c) => {
       size += c.length;
       if (size > MAX_BODY) {
-        reject(Object.assign(new Error('body too large'), { status: 413 }));
+        reject(Object.assign(new Error('body too large'), { status: 413, expose: true }));
         req.destroy();
       } else chunks.push(c);
     });
@@ -452,7 +465,7 @@ function readJson(req) {
         if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error();
         resolve(parsed);
       } catch {
-        reject(Object.assign(new Error('body must be a JSON object'), { status: 400 }));
+        reject(Object.assign(new Error('body must be a JSON object'), { status: 400, expose: true }));
       }
     });
     req.on('error', reject);
@@ -463,9 +476,16 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const port = Number(process.env.PORT ?? 8788);
   const host = process.env.HOST ?? '127.0.0.1';
   const helcim = createHelcim({ apiToken: process.env.HELCIM_API_TOKEN ?? '' });
+  // Fail closed: with real payments and no relay key, anyone who can reach the server could
+  // set goals and settle charges. Mock mode stays open for local development.
+  if (!helcim.mock && !process.env.RELAY_KEY) {
+    console.error('Refusing to start: HELCIM_API_TOKEN is set but RELAY_KEY is not. Set RELAY_KEY so only you can set goals and settle charges.');
+    process.exit(1);
+  }
   const { server } = createPledgeServer({
     helcim,
     relayKey: process.env.RELAY_KEY ?? '',
+    trustProxy: process.env.TRUST_PROXY === '1',
     milestone: Number(process.env.MILESTONE ?? 25),
     autoSettle: process.env.AUTO_SETTLE === '1',
     dataFile: process.env.DATA_FILE ?? join(HERE, 'data', 'state.json'),
